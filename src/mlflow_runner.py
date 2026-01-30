@@ -1,7 +1,7 @@
 import mlflow
 import mlflow.sklearn
 
-from src.components.model_training import train
+from src.components.model_training import train_model
 from components.model_evaluation import evaluate_model
 
 def run_experiment():
