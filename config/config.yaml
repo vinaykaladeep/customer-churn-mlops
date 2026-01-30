@@ -1,0 +1,33 @@
+data_ingestion:
+  artifact_dir: artifacts/data_ingestion
+  raw_data_path: artifacts/data_ingestion/raw.csv
+  source_data_path: data/raw/customer_churn.csv
+
+data_validation:
+  required_columns:
+    - customer_id
+    - gender
+    - senior_citizen
+    - partner
+    - dependents
+    - tenure
+    - phone_service
+    - internet_service
+    - contract
+    - payment_method
+    - monthly_charges
+    - total_charges
+    - churn
+  artifacts_dir: artifacts/data_validation/
+
+data_transformation:
+  artifact_dir: artifacts/data_transformation
+  target_column: churn
+
+model_training:
+  artifact_dir: artifacts/model_training
+  model_name: model.pkl
+  random_state: 42
+
+model_evaluation:
+  artifact_dir: artifacts/model_evaluation

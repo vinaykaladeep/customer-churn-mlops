@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Conda
+.conda/
+.envs/
+
+# Artifacts
+artifacts/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
