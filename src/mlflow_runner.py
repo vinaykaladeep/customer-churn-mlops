@@ -1,15 +1,9 @@
 import mlflow
 import mlflow.sklearn
 
-# -------------------------------
-# MLflow Configuration
-# -------------------------------
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("customer_churn_experiment")
 
-# -------------------------------
-# Pipeline Components
-# -------------------------------
 from src.components.data_ingestion import DataIngestion
 from src.components.data_validation import DataValidation
 from src.components.data_transformation import DataTransformation
@@ -20,75 +14,69 @@ from src.components.model_evaluation import ModelEvaluation
 def main():
     config_path = "config/config.yaml"
 
-    # -------------------------------
-    # Start MLflow Run
-    # -------------------------------
     with mlflow.start_run(run_name="logistic_regression_run"):
 
-        # ===============================
         # 1️⃣ Data Ingestion
-        # ===============================
         ingestion = DataIngestion(config_path)
         raw_data_path = ingestion.ingest_data()
+        mlflow.log_artifact(raw_data_path, artifact_path="data_ingestion")
 
-        mlflow.log_artifact(
-            raw_data_path,
-            artifact_path="data_ingestion"
-        )
-
-        # ===============================
         # 2️⃣ Data Validation
-        # ===============================
         validation = DataValidation(config_path)
         validation_report = validation.validate_data(raw_data_path)
-
         mlflow.log_dict(
             validation_report,
-            artifact_file="data_validation/validation_report.json"
+            "data_validation/validation_report.json"
         )
 
-        # ===============================
         # 3️⃣ Data Transformation
-        # ===============================
         transformation = DataTransformation(config_path)
         X_train, X_test, y_train, y_test = transformation.run(raw_data_path)
-
         mlflow.log_artifacts(
             transformation.artifact_dir,
             artifact_path="data_transformation"
         )
 
-        # ===============================
         # 4️⃣ Model Training
-        # ===============================
         trainer = ModelTraining(config_path)
         model = trainer.run(X_train, y_train)
 
-        # Log model parameters
-        mlflow.log_param("model_type", "LogisticRegression")
-        mlflow.log_param("random_state", trainer.random_state)
-
-        # Log trained model
         mlflow.sklearn.log_model(
-            sk_model=model,
+            model,
             artifact_path="model",
             registered_model_name="CustomerChurnModel"
         )
 
-        # ===============================
-        # 5️⃣ Model Evaluation
-        # ===============================
+        mlflow.log_param("model_type", "LogisticRegression")
+        mlflow.log_param("random_state", trainer.random_state)
+
+        # 5️⃣ Model Evaluation (with threshold tuning)
         evaluator = ModelEvaluation(config_path)
         metrics = evaluator.run(model, X_test, y_test)
 
-        # Log metrics individually (MLflow requirement)
-        for metric_name, metric_value in metrics.items():
-            mlflow.log_metric(metric_name, metric_value)
+        # Log best threshold
+        mlflow.log_param("best_threshold", metrics["best_threshold"])
 
-        # Log evaluation artifacts (metrics.json + confusion_matrix.png)
-        mlflow.log_artifacts(
-            evaluator.artifact_dir,
+        # Log scalar metrics only
+        mlflow.log_metric("accuracy", metrics["accuracy"])
+        mlflow.log_metric("precision_score", metrics["precision_score"])
+        mlflow.log_metric("recall_score", metrics["recall_score"])
+        mlflow.log_metric("f1_score", metrics["f1_score"])
+
+        # Log evaluation artifacts
+        mlflow.log_artifact(
+            f"{evaluator.artifact_dir}/confusion_matrix.png",
             artifact_path="model_evaluation"
+        )
+
+        mlflow.log_artifact(
+            f"{evaluator.artifact_dir}/metrics.json",
+            artifact_path="model_evaluation"
+        )
+
+        mlflow.log_dict(
+            metrics["threshold_metrics"],
+            "model_evaluation/threshold_metrics.json"
         )
 
         print("\n✅ MLflow pipeline executed successfully")
