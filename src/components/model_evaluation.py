@@ -1,6 +1,7 @@
 import os
 import json
 import numpy as np
+import mlflow
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import (
@@ -12,6 +13,7 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
+
 class ModelEvaluation:
     def __init__(self, config_path: str):
         self.artifact_dir = "artifacts/model_evaluation"
@@ -19,8 +21,8 @@ class ModelEvaluation:
 
     def run(self, model, X_test, y_test):
         """
-        Performs threshold tuning, evaluates model,
-        saves metrics + confusion matrix, and returns metrics.
+        Performs threshold tuning using nested MLflow runs,
+        selects best threshold, saves artifacts, and returns final metrics.
         """
 
         # -----------------------------
@@ -36,33 +38,42 @@ class ModelEvaluation:
         threshold_metrics = {}
 
         # -----------------------------
-        # 2️⃣ Threshold tuning loop
+        # 2️⃣ Nested MLflow runs per threshold
         # -----------------------------
         for threshold in thresholds:
-            y_pred = ["Yes" if p >= threshold else "No" for p in y_prob]
+            with mlflow.start_run(
+                run_name=f"threshold_{threshold:.2f}",
+                nested=True
+            ):
+                y_pred = ["Yes" if p >= threshold else "No" for p in y_prob]
 
-            precision = precision_score(
-                y_test, y_pred, pos_label="Yes", zero_division=0
-            )
-            recall = recall_score(
-                y_test, y_pred, pos_label="Yes", zero_division=0
-            )
-            f1 = f1_score(
-                y_test, y_pred, pos_label="Yes", zero_division=0
-            )
+                precision = precision_score(
+                    y_test, y_pred, pos_label="Yes", zero_division=0
+                )
+                recall = recall_score(
+                    y_test, y_pred, pos_label="Yes", zero_division=0
+                )
+                f1 = f1_score(
+                    y_test, y_pred, pos_label="Yes", zero_division=0
+                )
 
-            threshold_metrics[str(round(threshold, 2))] = {
-                "precision": precision,
-                "recall": recall,
-                "f1_score": f1
-            }
+                mlflow.log_param("threshold", round(threshold, 2))
+                mlflow.log_metric("precision", precision)
+                mlflow.log_metric("recall", recall)
+                mlflow.log_metric("f1_score", f1)
 
-            if f1 > best_f1:
-                best_f1 = f1
-                best_threshold = threshold
+                threshold_metrics[str(round(threshold, 2))] = {
+                    "precision": precision,
+                    "recall": recall,
+                    "f1_score": f1
+                }
+
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_threshold = threshold
 
         # -----------------------------
-        # 3️⃣ Final prediction with best threshold
+        # 3️⃣ Final evaluation with best threshold
         # -----------------------------
         y_pred_final = [
             "Yes" if p >= best_threshold else "No" for p in y_prob
@@ -84,7 +95,7 @@ class ModelEvaluation:
         )
 
         # -----------------------------
-        # 4️⃣ Save confusion matrix PNG
+        # 4️⃣ Save confusion matrix
         # -----------------------------
         disp = ConfusionMatrixDisplay(
             confusion_matrix=cm,
@@ -93,7 +104,9 @@ class ModelEvaluation:
         disp.plot(cmap="Blues")
         plt.title(f"Confusion Matrix (Threshold = {best_threshold:.2f})")
 
-        cm_path = os.path.join(self.artifact_dir, "confusion_matrix.png")
+        cm_path = os.path.join(
+            self.artifact_dir, "confusion_matrix.png"
+        )
         plt.savefig(cm_path)
         plt.close()
 
@@ -110,7 +123,9 @@ class ModelEvaluation:
             "threshold_metrics": threshold_metrics
         }
 
-        metrics_path = os.path.join(self.artifact_dir, "metrics.json")
+        metrics_path = os.path.join(
+            self.artifact_dir, "metrics.json"
+        )
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=4)
 
