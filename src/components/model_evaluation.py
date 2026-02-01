@@ -26,21 +26,20 @@ class ModelEvaluation:
 
     def run(self, model, X_test, y_test):
         """
-        Performs threshold tuning using nested MLflow runs,
-        selects best threshold, logs artifacts,
-        registers model, and promotes to STAGING (Option A).
+        ✔ Nested threshold tuning
+        ✔ Final evaluation in parent run
+        ✔ Single model registration
+        ✔ Promote to STAGING only
         """
 
         # -----------------------------
         # 1️⃣ Predict probabilities
         # -----------------------------
         y_prob = model.predict_proba(X_test)[:, 1]
-
         thresholds = np.arange(0.3, 0.81, 0.05)
 
         best_threshold = 0.5
         best_f1 = -1.0
-
         threshold_metrics = {}
 
         # -----------------------------
@@ -79,7 +78,7 @@ class ModelEvaluation:
                     best_threshold = threshold
 
         # -----------------------------
-        # 3️⃣ Final evaluation with best threshold
+        # 3️⃣ Final evaluation (parent run)
         # -----------------------------
         y_pred_final = [
             "Yes" if p >= best_threshold else "No" for p in y_prob
@@ -96,13 +95,13 @@ class ModelEvaluation:
             y_test, y_pred_final, pos_label="Yes", zero_division=0
         )
 
+        # -----------------------------
+        # 4️⃣ Confusion Matrix
+        # -----------------------------
         cm = confusion_matrix(
             y_test, y_pred_final, labels=["No", "Yes"]
         )
 
-        # -----------------------------
-        # 4️⃣ Save confusion matrix
-        # -----------------------------
         disp = ConfusionMatrixDisplay(
             confusion_matrix=cm,
             display_labels=["No", "Yes"]
@@ -115,7 +114,7 @@ class ModelEvaluation:
         plt.close()
 
         # -----------------------------
-        # 5️⃣ Save metrics JSON (CONSISTENT NAMES)
+        # 5️⃣ Save metrics JSON
         # -----------------------------
         metrics = {
             "best_threshold": round(best_threshold, 2),
@@ -131,7 +130,7 @@ class ModelEvaluation:
             json.dump(metrics, f, indent=4)
 
         # -----------------------------
-        # 6️⃣ Log metrics & artifacts
+        # 6️⃣ Log parent metrics & artifacts
         # -----------------------------
         mlflow.log_param("best_threshold", round(best_threshold, 2))
         mlflow.log_metric("accuracy", accuracy)
@@ -142,45 +141,24 @@ class ModelEvaluation:
         mlflow.log_artifact(cm_path)
         mlflow.log_artifact(metrics_path)
 
-        # -----------------------------
-        # 7️⃣ Log model ONCE (CRITICAL FIX)
-        # -----------------------------
-        mlflow.sklearn.log_model(
-            model,
-            artifact_path="model"
+        # Get version safely
+        latest_versions = self.client.get_latest_versions(
+            self.model_name, stages=["None"]
         )
-
-        run_id = mlflow.active_run().info.run_id
-        model_uri = f"runs:/{run_id}/model"
+        model_version = latest_versions[0].version
 
         # -----------------------------
-        # 8️⃣ Register model (ONCE)
-        # -----------------------------
-        registered_model = mlflow.register_model(
-            model_uri=model_uri,
-            name=self.model_name
-        )
-
-        model_version = registered_model.version
-
-        # -----------------------------
-        # 9️⃣ Store version-level metadata
+        #  7️⃣ Version metadata
         # -----------------------------
         self.client.set_model_version_tag(
-            self.model_name,
-            model_version,
-            "f1_score",
-            str(f1)
+            self.model_name, model_version, "f1_score", str(f1)
         )
         self.client.set_model_version_tag(
-            self.model_name,
-            model_version,
-            "best_threshold",
-            str(round(best_threshold, 2))
+            self.model_name, model_version, "best_threshold", str(round(best_threshold, 2))
         )
 
         # -----------------------------
-        # 🔟 Promote to STAGING (Option A)
+        # 8️⃣ Promote to STAGING only
         # -----------------------------
         self.client.transition_model_version_stage(
             name=self.model_name,
@@ -191,7 +169,6 @@ class ModelEvaluation:
 
         return metrics
 
-#---------------------------------------------------------------
 # import os
 # import json
 # import numpy as np
@@ -215,23 +192,21 @@ class ModelEvaluation:
 #     def run(self, model, X_test, y_test):
 #         """
 #         Performs threshold tuning, evaluates model,
-#         saves metrics + confusion matrix, and returns metrics.
+#         saves metrics & confusion matrix, and returns metrics.
 #         """
 
 #         # -----------------------------
 #         # 1️⃣ Predict probabilities
 #         # -----------------------------
 #         y_prob = model.predict_proba(X_test)[:, 1]
-
 #         thresholds = np.arange(0.3, 0.81, 0.05)
 
 #         best_threshold = 0.5
-#         best_f1 = -1
-
-#         threshold_results = {}
+#         best_f1 = -1.0
+#         threshold_metrics = {}
 
 #         # -----------------------------
-#         # 2️⃣ Threshold tuning loop
+#         # 2️⃣ Threshold tuning
 #         # -----------------------------
 #         for threshold in thresholds:
 #             y_pred = ["Yes" if p >= threshold else "No" for p in y_prob]
@@ -246,7 +221,7 @@ class ModelEvaluation:
 #                 y_test, y_pred, pos_label="Yes", zero_division=0
 #             )
 
-#             threshold_results[str(round(threshold, 2))] = {
+#             threshold_metrics[str(round(threshold, 2))] = {
 #                 "precision": precision,
 #                 "recall": recall,
 #                 "f1_score": f1
@@ -257,7 +232,7 @@ class ModelEvaluation:
 #                 best_threshold = threshold
 
 #         # -----------------------------
-#         # 3️⃣ Final prediction with best threshold
+#         # 3️⃣ Final evaluation
 #         # -----------------------------
 #         y_pred_final = [
 #             "Yes" if p >= best_threshold else "No" for p in y_prob
@@ -274,13 +249,13 @@ class ModelEvaluation:
 #             y_test, y_pred_final, pos_label="Yes", zero_division=0
 #         )
 
+#         # -----------------------------
+#         # 4️⃣ Confusion matrix
+#         # -----------------------------
 #         cm = confusion_matrix(
 #             y_test, y_pred_final, labels=["No", "Yes"]
 #         )
 
-#         # -----------------------------
-#         # 4️⃣ Save confusion matrix PNG
-#         # -----------------------------
 #         disp = ConfusionMatrixDisplay(
 #             confusion_matrix=cm,
 #             display_labels=["No", "Yes"]
@@ -293,16 +268,15 @@ class ModelEvaluation:
 #         plt.close()
 
 #         # -----------------------------
-#         # 5️⃣ Save metrics JSON
+#         # 5️⃣ Save metrics (CONSISTENT NAMING)
 #         # -----------------------------
 #         metrics = {
 #             "best_threshold": round(best_threshold, 2),
 #             "accuracy": accuracy,
-#             "precision_score": precision,
-#             "recall_score": recall,
+#             "precision": precision,
+#             "recall": recall,
 #             "f1_score": f1,
-#             "confusion_matrix": cm.tolist(),
-#             "threshold_tuning": threshold_results
+#             "threshold_metrics": threshold_metrics
 #         }
 
 #         metrics_path = os.path.join(self.artifact_dir, "metrics.json")
@@ -310,64 +284,3 @@ class ModelEvaluation:
 #             json.dump(metrics, f, indent=4)
 
 #         return metrics
-
-#---------------------------------------------------------------
-# import os
-# import json
-# import joblib
-
-# from sklearn.metrics import (
-#     accuracy_score,
-#     precision_score,
-#     recall_score,
-#     f1_score,
-#     confusion_matrix
-# )
-
-# from src.utils.common import read_yaml
-# from src.logger import get_logger
-
-# logger = get_logger(__name__)
-
-
-# class ModelEvaluation:
-#     def __init__(self, config_path: str):
-#         self.config = read_yaml(config_path)
-#         self.eval_config = self.config["model_evaluation"]
-
-#         self.artifact_dir = self.eval_config["artifact_dir"]
-#         os.makedirs(self.artifact_dir, exist_ok=True)
-
-#     def evaluate(self, model, X_test, y_test):
-#         logger.info("Starting model evaluation")
-#         print("\n[Model Evaluation] Started")
-
-#         # Predictions
-#         y_pred = model.predict(X_test)
-
-#         # Metrics
-#         metrics = {
-#             "accuracy": accuracy_score(y_test, y_pred),
-#             "precision_score":precision_score(y_test,y_pred,pos_label="Yes"),
-#             "recall_score":recall_score(y_test, y_pred, pos_label="Yes"),
-#             "f1_score":f1_score(y_test, y_pred, pos_label="Yes"),
-#             "confusion_matrix": confusion_matrix(y_test, y_pred).tolist()
-#         }
-
-#         # Save metrics
-#         metrics_path = os.path.join(self.artifact_dir, "metrics.json")
-#         with open(metrics_path, "w") as f:
-#             json.dump(metrics, f, indent=4)
-
-#         # Console output (your requirement ✅)
-#         print("✅ Model Evaluation Metrics:")
-#         for k, v in metrics.items():
-#             print(f"{k}: {v}")
-
-#         print(f"📁 Metrics saved at: {metrics_path}")
-#         logger.info(f"Evaluation metrics: {metrics}")
-
-#         return metrics
-
-#     def run(self, model, X_test, y_test):
-#         return self.evaluate(model, X_test, y_test)

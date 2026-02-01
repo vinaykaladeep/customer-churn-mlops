@@ -37,21 +37,25 @@ def main():
             artifact_path="data_transformation"
         )
 
-        # 4️⃣ Model Training
+        # 4️⃣ Model Training (🚨 ONLY PLACE MODEL IS LOGGED)
         trainer = ModelTraining(config_path)
         model = trainer.run(X_train, y_train)
-        
+
         mlflow.log_param("model_type", "LogisticRegression")
         mlflow.log_param("random_state", trainer.random_state)
 
-        # 5️⃣ Model Evaluation (with threshold tuning)
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model",
+            registered_model_name="CustomerChurnModel"
+        )
+
+        # 5️⃣ Model Evaluation (NO model logging here)
         evaluator = ModelEvaluation(config_path)
         metrics = evaluator.run(model, X_test, y_test)
 
-        # Log best threshold
+        # Log final metrics (consistent names)
         mlflow.log_param("best_threshold", metrics["best_threshold"])
-
-        # Log scalar metrics only
         mlflow.log_metric("accuracy", metrics["accuracy"])
         mlflow.log_metric("precision", metrics["precision"])
         mlflow.log_metric("recall", metrics["recall"])
