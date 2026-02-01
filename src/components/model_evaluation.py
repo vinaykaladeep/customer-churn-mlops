@@ -2,8 +2,10 @@ import os
 import json
 import numpy as np
 import mlflow
+import mlflow.sklearn
 import matplotlib.pyplot as plt
 
+from mlflow.tracking import MlflowClient
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -19,10 +21,14 @@ class ModelEvaluation:
         self.artifact_dir = "artifacts/model_evaluation"
         os.makedirs(self.artifact_dir, exist_ok=True)
 
+        self.model_name = "CustomerChurnModel"
+        self.client = MlflowClient()
+
     def run(self, model, X_test, y_test):
         """
         Performs threshold tuning using nested MLflow runs,
-        selects best threshold, saves artifacts, and returns final metrics.
+        selects best threshold, logs artifacts,
+        registers model, and promotes to STAGING (Option A).
         """
 
         # -----------------------------
@@ -33,12 +39,12 @@ class ModelEvaluation:
         thresholds = np.arange(0.3, 0.81, 0.05)
 
         best_threshold = 0.5
-        best_f1 = -1
+        best_f1 = -1.0
 
         threshold_metrics = {}
 
         # -----------------------------
-        # 2️⃣ Nested MLflow runs per threshold
+        # 2️⃣ Nested MLflow runs (threshold tuning)
         # -----------------------------
         for threshold in thresholds:
             with mlflow.start_run(
@@ -104,30 +110,84 @@ class ModelEvaluation:
         disp.plot(cmap="Blues")
         plt.title(f"Confusion Matrix (Threshold = {best_threshold:.2f})")
 
-        cm_path = os.path.join(
-            self.artifact_dir, "confusion_matrix.png"
-        )
+        cm_path = os.path.join(self.artifact_dir, "confusion_matrix.png")
         plt.savefig(cm_path)
         plt.close()
 
         # -----------------------------
-        # 5️⃣ Save metrics JSON
+        # 5️⃣ Save metrics JSON (CONSISTENT NAMES)
         # -----------------------------
         metrics = {
             "best_threshold": round(best_threshold, 2),
             "accuracy": accuracy,
-            "precision_score": precision,
-            "recall_score": recall,
+            "precision": precision,
+            "recall": recall,
             "f1_score": f1,
-            "confusion_matrix": cm.tolist(),
             "threshold_metrics": threshold_metrics
         }
 
-        metrics_path = os.path.join(
-            self.artifact_dir, "metrics.json"
-        )
+        metrics_path = os.path.join(self.artifact_dir, "metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=4)
+
+        # -----------------------------
+        # 6️⃣ Log metrics & artifacts
+        # -----------------------------
+        mlflow.log_param("best_threshold", round(best_threshold, 2))
+        mlflow.log_metric("accuracy", accuracy)
+        mlflow.log_metric("precision", precision)
+        mlflow.log_metric("recall", recall)
+        mlflow.log_metric("f1_score", f1)
+
+        mlflow.log_artifact(cm_path)
+        mlflow.log_artifact(metrics_path)
+
+        # -----------------------------
+        # 7️⃣ Log model ONCE (CRITICAL FIX)
+        # -----------------------------
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model"
+        )
+
+        run_id = mlflow.active_run().info.run_id
+        model_uri = f"runs:/{run_id}/model"
+
+        # -----------------------------
+        # 8️⃣ Register model (ONCE)
+        # -----------------------------
+        registered_model = mlflow.register_model(
+            model_uri=model_uri,
+            name=self.model_name
+        )
+
+        model_version = registered_model.version
+
+        # -----------------------------
+        # 9️⃣ Store version-level metadata
+        # -----------------------------
+        self.client.set_model_version_tag(
+            self.model_name,
+            model_version,
+            "f1_score",
+            str(f1)
+        )
+        self.client.set_model_version_tag(
+            self.model_name,
+            model_version,
+            "best_threshold",
+            str(round(best_threshold, 2))
+        )
+
+        # -----------------------------
+        # 🔟 Promote to STAGING (Option A)
+        # -----------------------------
+        self.client.transition_model_version_stage(
+            name=self.model_name,
+            version=model_version,
+            stage="Staging",
+            archive_existing_versions=True
+        )
 
         return metrics
 

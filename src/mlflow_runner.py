@@ -40,13 +40,7 @@ def main():
         # 4️⃣ Model Training
         trainer = ModelTraining(config_path)
         model = trainer.run(X_train, y_train)
-
-        mlflow.sklearn.log_model(
-            model,
-            artifact_path="model",
-            registered_model_name="CustomerChurnModel"
-        )
-
+        
         mlflow.log_param("model_type", "LogisticRegression")
         mlflow.log_param("random_state", trainer.random_state)
 
@@ -59,8 +53,8 @@ def main():
 
         # Log scalar metrics only
         mlflow.log_metric("accuracy", metrics["accuracy"])
-        mlflow.log_metric("precision_score", metrics["precision_score"])
-        mlflow.log_metric("recall_score", metrics["recall_score"])
+        mlflow.log_metric("precision", metrics["precision"])
+        mlflow.log_metric("recall", metrics["recall"])
         mlflow.log_metric("f1_score", metrics["f1_score"])
 
         # Log evaluation artifacts
