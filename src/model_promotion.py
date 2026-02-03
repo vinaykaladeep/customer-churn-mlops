@@ -9,7 +9,7 @@ mlflow.set_tracking_uri("sqlite:///mlflow.db")
 MODEL_NAME = "CustomerChurnModel"
 
 # Change this manually when promoting
-VERSION_TO_PROMOTE = "4"   # <-- your visible version
+VERSION_TO_PROMOTE = "9"   # <-- your visible version
 
 
 def promote_to_production(version: str):

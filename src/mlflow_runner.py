@@ -59,7 +59,8 @@ def main():
         mlflow.log_metric("accuracy", metrics["accuracy"])
         mlflow.log_metric("precision", metrics["precision"])
         mlflow.log_metric("recall", metrics["recall"])
-        mlflow.log_metric("f1_score", metrics["f1_score"])
+        # mlflow.log_metric("f1_score", metrics["f1_score"])
+        mlflow.log_metric("f1", metrics["f1"])
 
         # Log evaluation artifacts
         mlflow.log_artifact(
