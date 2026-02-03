@@ -65,6 +65,15 @@ class ModelEvaluation:
         }
 
         # --------------------------------------------------
+        # <phase2_step3>
+        # MLflow tags for model version traceability
+        # --------------------------------------------------
+        mlflow.set_tag("best_threshold", round(best_threshold, 4))
+        mlflow.set_tag("best_f1", round(best_f1, 4))
+        mlflow.set_tag("threshold_metric", "f1")
+        # </phase2_step3>
+
+        # --------------------------------------------------
         # 2️⃣ Save artifacts expected by runner
         # --------------------------------------------------
 

@@ -5,8 +5,11 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 import numpy as np
 
+from typing import List
+
 from src.serving.model_loader import load_production_model
 from src.serving.preprocessor_loader import load_preprocessor
+from src.serving.inference_service import InferenceService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,36 +27,42 @@ async def lifespan(app: FastAPI):
 app = FastAPI()
 model, threshold = load_production_model()
 preprocessor = load_preprocessor()
+inference_service = InferenceService(model=model, preprocessor=preprocessor, threshold=threshold)
 
 @app.get("/")
 def root():
     return {"message": "Customer Churn API is running"}
 
+# class ChurnRequest(BaseModel):
+#     data: dict
 class ChurnRequest(BaseModel):
     data: dict
 
-
 @app.post("/predict")
 def predict(request: ChurnRequest):
-    # 1️⃣ Convert input dict → DataFrame
-    import pandas as pd
-    df = pd.DataFrame([request.data])
+    return inference_service.predict(request.data)
 
-    # 2️⃣ Apply SAME preprocessor
-    X = preprocessor.transform(df)
+# @app.post("/predict")
+# def predict(request: ChurnRequest):
+#     # 1️⃣ Convert input dict → DataFrame
+#     import pandas as pd
+#     df = pd.DataFrame([request.data])
 
-    # 3️⃣ Predict probability
-    # proba = model.predict_proba(X)[:, 1][0]
-    proba = float(model.predict(X)[0])
+#     # 2️⃣ Apply SAME preprocessor
+#     X = preprocessor.transform(df)
 
-    # 4️⃣ Apply tuned threshold
-    prediction = int(proba >= threshold)
+#     # 3️⃣ Predict probability
+#     # proba = model.predict_proba(X)[:, 1][0]
+#     proba = float(model.predict(X)[0])
 
-    return {
-        "churn_probability": round(float(proba), 4),
-        "threshold": threshold,
-        "prediction": prediction,
-    }
+#     # 4️⃣ Apply tuned threshold
+#     prediction = int(proba >= threshold)
+
+#     return {
+#         "churn_probability": round(float(proba), 4),
+#         "threshold": threshold,
+#         "prediction": prediction,
+#     }
 
 @app.get("/health")
 def health():

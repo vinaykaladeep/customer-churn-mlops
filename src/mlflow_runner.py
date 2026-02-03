@@ -1,5 +1,7 @@
+# src/mlflow_runner.py
+
 import mlflow
-import mlflow.sklearn
+import mlflow.pyfunc
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("customer_churn_experiment")
@@ -9,6 +11,21 @@ from src.components.data_validation import DataValidation
 from src.components.data_transformation import DataTransformation
 from src.components.model_training import ModelTraining
 from src.components.model_evaluation import ModelEvaluation
+
+
+# <phase2_step2>
+class ChurnPyFuncModel(mlflow.pyfunc.PythonModel):
+    """
+    Wraps sklearn model so predict() always returns churn probability
+    """
+
+    def __init__(self, sklearn_model):
+        self.model = sklearn_model
+
+    def predict(self, context, model_input):
+        # Always return probability of positive class
+        return self.model.predict_proba(model_input)[:, 1]
+# </phase2_step2>
 
 
 def main():
@@ -37,32 +54,35 @@ def main():
             artifact_path="data_transformation"
         )
 
-        # 4️⃣ Model Training (🚨 ONLY PLACE MODEL IS LOGGED)
+        # 4️⃣ Model Training
         trainer = ModelTraining(config_path)
-        model = trainer.run(X_train, y_train)
+        sklearn_model = trainer.run(X_train, y_train)
 
         mlflow.log_param("model_type", "LogisticRegression")
         mlflow.log_param("random_state", trainer.random_state)
 
-        mlflow.sklearn.log_model(
-            model,
-            artifact_path="model",
+        # <phase2_step2>
+        pyfunc_model = ChurnPyFuncModel(sklearn_model)
+
+        mlflow.pyfunc.log_model(
+            name="model",                          # ✅ new API
+            python_model=pyfunc_model,
+            input_example=trainer.input_example,   # ✅ from Step-1
+            signature=trainer.signature,           # ✅ from Step-1
             registered_model_name="CustomerChurnModel"
         )
+        # </phase2_step2>
 
-        # 5️⃣ Model Evaluation (NO model logging here)
+        # 5️⃣ Model Evaluation (UNCHANGED)
         evaluator = ModelEvaluation(config_path)
-        metrics = evaluator.run(model, X_test, y_test)
+        metrics = evaluator.run(sklearn_model, X_test, y_test)
 
-        # Log final metrics (consistent names)
         mlflow.log_param("best_threshold", metrics["best_threshold"])
         mlflow.log_metric("accuracy", metrics["accuracy"])
         mlflow.log_metric("precision", metrics["precision"])
         mlflow.log_metric("recall", metrics["recall"])
-        # mlflow.log_metric("f1_score", metrics["f1_score"])
         mlflow.log_metric("f1", metrics["f1"])
 
-        # Log evaluation artifacts
         mlflow.log_artifact(
             f"{evaluator.artifact_dir}/confusion_matrix.png",
             artifact_path="model_evaluation"
